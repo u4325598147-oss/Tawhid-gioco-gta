@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Tawhid Ultimate City</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        #ui { 
+            position: absolute; top: 10px; left: 10px; 
+            color: #00ff00; font-family: monospace; 
+            background: rgba(0,0,0,0.7); padding: 15px; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <b>CONTROLLI:</b><br>
+        WASD: Muoviti | MOUSE: Mira | CLICK: Spara<br>
+        <b>F: Entra/Esci dall'Auto</b>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
+        import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/PointerLockControls.js';
+
+        // --- 1. SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // --- 2. STATO DEL GIOCO ---
+        let isDriving = false;
+        let activeVehicle = null;
+        const keys = {};
+
+        // --- 3. MONDO E LUCI ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const sun = new THREE.DirectionalLight(0xffffff, 1);
+        sun.position.set(10, 20, 10);
+        scene.add(sun);
+
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        // --- 4. NPC (ABITANTI) 🚶‍♂️ ---
+        const npcs = [];
+        for(let i=0; i<30; i++) {
+            const npc = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.6), new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff }));
+            npc.position.set((Math.random()-0.5)*100, 0.8, (Math.random()-0.5)*100);
+            scene.add(npc);
+            npcs.push({ mesh: npc, speed: 0.05 + Math.random()*0.1 });
+        }
+
+        // --- 5. VEICOLI 🚗 ---
+        const cars = [];
+        function createCar(x, z, color) {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshStandardMaterial({ color }));
+            body.position.y = 0.5;
+            group.add(body);
+            group.position.set(x, 0, z);
+            scene.add(group);
+            return { mesh: group, speed: 0 };
+        }
+        cars.push(createCar(5, 0, 0xff0000));
+        cars.push(createCar(-5, 10, 0x0000ff));
+
+        // --- 6. CONTROLLI ---
+        const controls = new PointerLockControls(camera, document.body);
+        document.addEventListener('click', () => controls.lock());
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if(e.key.toLowerCase() === 'f') toggleVehicle();
+        });
+        window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+
+        function toggleVehicle() {
+            if(!isDriving) {
+                cars.forEach(c => {
+                    if(camera.position.distanceTo(c.mesh.position) < 4) {
+                        isDriving = true;
+                        activeVehicle = c;
+                        controls.unlock(); // Disattiva movimento a piedi
+                    }
+                });
+            } else {
+                isDriving = false;
+                camera.position.add(new THREE.Vector3(3, 0, 0)); // Scendi a lato
+                activeVehicle = null;
+            }
+        }
+
+        // --- 7. LOOP ANIMAZIONE ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Muovi NPC
+            npcs.forEach(n => {
+                n.mesh.position.z += n.speed;
+                if(n.mesh.position.z > 50) n.mesh.position.z = -50;
+            });
+
+            if(isDriving && activeVehicle) {
+                // LOGICA GUIDA 🏎️
+                if(keys['w']) activeVehicle.speed += 0.01;
+                if(keys['s']) activeVehicle.speed -= 0.01;
+                activeVehicle.mesh.translateZ(activeVehicle.speed);
+                activeVehicle.speed *= 0.95; // Attrito
+
+                // Camera segue l'auto
+                camera.position.copy(activeVehicle.mesh.position).add(new THREE.Vector3(0, 5, -10));
+                camera.lookAt(activeVehicle.mesh.position);
+            } else if(controls.isLocked) {
+                // LOGICA A PIEDI 🚶
+                if(keys['w']) controls.moveForward(0.15);
+                if(keys['s']) controls.moveForward(-0.15);
+                if(keys['a']) controls.moveRight(-0.1);
+                if(keys['d']) controls.moveRight(0.1);
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
